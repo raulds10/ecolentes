@@ -9,6 +9,9 @@ import {
   STAGE_LABELS,
   type CaseStage,
   type DeliveriesReport,
+  type Evolution,
+  type EvolutionBucket,
+  type EvolutionPeriod,
   type PendingReport,
   type PersonReport,
   type Role,
@@ -240,6 +243,17 @@ export function DeliveriesView({ onOpen }: { onOpen: (caseId: string) => void })
         />
       </div>
 
+      <EvolutionCard
+        title="Pares entregados"
+        hint="Cuántos pares se entregaron en cada período, según la fecha de entrega."
+        value={(b) => b.deliveredPairs}
+        detail={(b) =>
+          b.deliveries === 0
+            ? 'Sin entregas'
+            : `${pares(b.deliveredPairs)} en ${b.deliveries} ${b.deliveries === 1 ? 'entrega' : 'entregas'}`
+        }
+      />
+
       <div className="card stack-tight">
         <table className="report">
           <thead>
@@ -339,6 +353,16 @@ export function PendingView({ onOpen }: { onOpen: (caseId: string) => void }) {
         <Kpi value={data.totals.overdue} label="Fuera de plazo" hint="Entre los tres grupos" />
       </div>
 
+      <EvolutionCard
+        className="no-print"
+        title="Pares en el municipio sin entregar"
+        hint="Lo que quedaba en el depósito, controlado o no, al cierre de cada período; en el que está en curso, lo que hay hoy."
+        value={(b) => b.stockPairs}
+        detail={(b) =>
+          `Quedaban ${pares(b.stockPairs)} · llegaron ${b.arrivedPairs} · se entregaron ${b.deliveredPairs}`
+        }
+      />
+
       <div className="card stack-tight no-print">
         <div className="row between">
           <p className="muted">
@@ -379,6 +403,133 @@ export function PendingView({ onOpen }: { onOpen: (caseId: string) => void }) {
           <StockTable rows={data.atOptician} nominal={data.nominal} onOpen={onOpen} />
         </div>
       )}
+    </div>
+  );
+}
+
+const PERIOD_LABELS: Record<EvolutionPeriod, string> = { semana: 'Por semana', mes: 'Por mes' };
+const PERIOD_KEY = 'ecolentes.reportes.periodo';
+const TZ = 'America/Argentina/Tucuman';
+
+/** El corte elegido se recuerda en este navegador: entregas y pendientes usan el mismo. */
+function savedPeriod(): EvolutionPeriod {
+  try {
+    return localStorage.getItem(PERIOD_KEY) === 'mes' ? 'mes' : 'semana';
+  } catch {
+    return 'semana';
+  }
+}
+
+function bucketLabel(b: EvolutionBucket, period: EvolutionPeriod, first: boolean): string {
+  const start = new Date(b.start);
+  if (period === 'semana') {
+    return start.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', timeZone: TZ });
+  }
+  const month = start.toLocaleDateString('es-AR', { month: 'short', timeZone: TZ }).replace('.', '');
+  // El año se agrega al primero y cada vez que cambia, para no repetirlo en todas.
+  const monthIndex = Number(start.toLocaleDateString('en-US', { month: 'numeric', timeZone: TZ }));
+  if (!first && monthIndex !== 1) return month;
+  return `${month} ${start.toLocaleDateString('es-AR', { year: '2-digit', timeZone: TZ })}`;
+}
+
+function bucketTitle(b: EvolutionBucket, period: EvolutionPeriod): string {
+  const fmt = (iso: string, opts: Intl.DateTimeFormatOptions) =>
+    new Date(iso).toLocaleDateString('es-AR', { ...opts, timeZone: TZ });
+  if (period === 'mes') {
+    const name = fmt(b.start, { month: 'long', year: 'numeric' });
+    return b.current ? `${name} (en curso)` : name;
+  }
+  // El fin es el lunes siguiente a las 00: el último día de la semana es el anterior.
+  const lastDay = new Date(new Date(b.start).getTime() + 6 * 86_400_000).toISOString();
+  const range = `${fmt(b.start, { day: 'numeric', month: 'numeric' })} al ${fmt(lastDay, { day: 'numeric', month: 'numeric' })}`;
+  return b.current ? `Semana del ${range} (en curso)` : `Semana del ${range}`;
+}
+
+/**
+ * La evolución de un número semana a semana o mes a mes, con el corte que se
+ * elige en la misma tarjeta. Cada barra lleva su valor arriba: son números
+ * chicos y es más rápido leerlos que estimarlos contra un eje.
+ */
+function EvolutionCard({
+  title,
+  hint,
+  value,
+  detail,
+  className,
+}: {
+  title: string;
+  hint: string;
+  value: (b: EvolutionBucket) => number;
+  detail: (b: EvolutionBucket) => string;
+  className?: string;
+}) {
+  const [period, setPeriod] = useState<EvolutionPeriod>(savedPeriod);
+  const { data, error } = useReport<Evolution>(() => api.evolutionReport(period), [period]);
+
+  const choose = (next: EvolutionPeriod) => {
+    setPeriod(next);
+    try {
+      localStorage.setItem(PERIOD_KEY, next);
+    } catch {
+      // Sin almacenamiento, el corte vuelve a "por semana" al recargar.
+    }
+  };
+
+  const max = Math.max(1, ...(data?.buckets ?? []).map(value));
+
+  return (
+    <div className={`card stack-tight ${className ?? ''}`}>
+      <div className="row between">
+        <h3>{title}</h3>
+        <div className="tabs view-tabs" role="tablist" aria-label="Cómo cortar el gráfico">
+          {(['semana', 'mes'] as const).map((p) => (
+            <button
+              key={p}
+              type="button"
+              role="tab"
+              aria-selected={period === p}
+              className={period === p ? 'tab active' : 'tab'}
+              onClick={() => choose(p)}
+            >
+              {PERIOD_LABELS[p]}
+            </button>
+          ))}
+        </div>
+      </div>
+      {error && <p className="error">{error}</p>}
+      {!data && !error && <p className="muted">Calculando…</p>}
+      {data && (
+        <div className="colchart" role="list" aria-label={title}>
+          {data.buckets.map((b, i) => {
+            const v = value(b);
+            const label = bucketTitle(b, data.period);
+            return (
+              <div
+                className={b.current ? 'col current' : 'col'}
+                key={b.start}
+                role="listitem"
+                tabIndex={0}
+                aria-label={`${label}: ${detail(b)}`}
+              >
+                <span className="col-value">{v}</span>
+                <span className="col-track">
+                  <span className="col-fill" style={{ height: `${(v / max) * 100}%` }} />
+                </span>
+                <span className="col-label">{bucketLabel(b, data.period, i === 0)}</span>
+                <span className="col-tip" role="tooltip">
+                  <strong>{label}</strong>
+                  <br />
+                  {detail(b)}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      <p className="muted">
+        {hint} {period === 'semana' ? 'Las semanas van de lunes a domingo.' : ''} La barra
+        rayada es el período en curso.
+      </p>
     </div>
   );
 }
