@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { seesAttachment } from '@ecolentes/shared';
 import {
   api,
   daysSince,
@@ -10,6 +11,7 @@ import {
   type Person,
   type Role,
 } from './lib/api';
+import { SavedPhoto } from './PhotoField';
 
 const ACTION_LABELS: Record<AuditEntry['action'], string> = {
   VIEW: 'Vio la ficha',
@@ -59,34 +61,45 @@ export function PersonDetail({
   if (error) return <p className="error">{error}</p>;
   if (!person) return <p className="muted">Abriendo la ficha…</p>;
 
+  const canSeeDni = seesAttachment(role, 'DNI_FRONT');
+  const age = ageLabel(person);
+
   return (
     <div className="stack">
       <button type="button" className="link" onClick={onBack}>
         ← Volver a buscar
       </button>
 
-      <article className="card">
-        <h2>
-          {person.lastName}, {person.firstName}
-        </h2>
-        <p className="muted">DNI {formatDni(person.dni)}</p>
+      <article className="card person-sheet">
+        <header className="person-head">
+          {canSeeDni && (
+            <div className="dni-frame">
+              {person.dniFrontId ? (
+                <SavedPhoto
+                  label="DNI, frente"
+                  load={() => api.attachment(person.dniFrontId!)}
+                />
+              ) : (
+                <p className="muted">Sin foto del frente del DNI.</p>
+              )}
+            </div>
+          )}
+          <div className="person-identity">
+            <h2>
+              {person.lastName}, {person.firstName}
+            </h2>
+            <p className="dni">DNI {formatDni(person.dni)}</p>
+            {age && <p className="person-age">{age}</p>}
+          </div>
+        </header>
 
-        <dl className="facts">
+        <dl className="fact-grid">
           <Fact label="Fecha de nacimiento" value={formatDate(person.birthDate)} />
-          <Fact
-            label="Edad"
-            value={
-              person.birthDate
-                ? `${yearsSince(person.birthDate)} años`
-                : person.ageAtIntake != null
-                  ? `${person.ageAtIntake} años, anotada en la atención`
-                  : null
-            }
-          />
+          <Fact label="Edad" value={age} />
           <Fact label="Contacto" value={person.phone} />
           <Fact label="Barrio" value={person.neighborhood} />
           <Fact label="Domicilio" value={person.address} />
-          <Fact label="Representante" value={person.representativeName} />
+          <Fact label="Representante" value={representativeOf(person)} />
         </dl>
       </article>
 
@@ -97,31 +110,40 @@ export function PersonDetail({
           <p className="muted">Nunca pidió anteojos: esta ficha no tiene ningún expediente.</p>
         )}
         {cases && cases.length > 0 && (
-          <ul className="cases-of-person">
-            {cases.map((c) => (
-              <li key={c.id}>
-                <button type="button" className="link" onClick={() => onOpenCase(c.id)}>
-                  <strong className="mono">{c.code}</strong>
-                </button>
-                <span>
-                  {STAGE_LABELS[c.stage]}{' '}
-                  <span className={c.overdue ? 'days late' : 'days'}>
-                    hace {daysSince(c.stageSince)} d
-                  </span>
-                  {c.hold && <span className="chip hold">{HOLD_LABELS[c.hold]}</span>}
-                </span>
-                <span className="muted">
-                  {c.glasses.length === 0
-                    ? `${c.pairs} ${c.pairs === 1 ? 'par pedido' : 'pares pedidos'}, todavía sin código`
-                    : c.glasses
-                        .map(
-                          (pair) =>
-                            `${pair.code} (${pair.kind === 'CERCA' ? 'cerca' : 'lejos'}${pair.deliveredAt ? ', entregado' : ''})`,
-                        )
-                        .join(' · ')}
-                </span>
-              </li>
-            ))}
+          <ul className="person-cases">
+            {cases.map((c) => {
+              const days = daysSince(c.stageSince);
+              return (
+                <li key={c.id}>
+                  <button type="button" className="person-case" onClick={() => onOpenCase(c.id)}>
+                    <strong className="code">{c.code}</strong>
+                    <span className="case-meta">
+                      <span className="chip">{STAGE_LABELS[c.stage]}</span>
+                      <span className={c.overdue ? 'days late' : 'days'}>
+                        hace {days} {days === 1 ? 'día' : 'días'}
+                      </span>
+                      {c.hold && <span className="chip hold">{HOLD_LABELS[c.hold]}</span>}
+                    </span>
+                    <span className="pair-codes">
+                      {c.glasses.length === 0 ? (
+                        <span className="muted">
+                          {c.pairs} {c.pairs === 1 ? 'par pedido' : 'pares pedidos'}, todavía sin
+                          código
+                        </span>
+                      ) : (
+                        c.glasses.map((pair) => (
+                          <span key={pair.code}>
+                            {pair.code}{' '}
+                            <span className="muted">{pair.kind === 'CERCA' ? 'cerca' : 'lejos'}</span>
+                            {pair.deliveredAt && <span className="muted"> · entregado</span>}
+                          </span>
+                        ))
+                      )}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         )}
       </article>
@@ -155,11 +177,29 @@ export function PersonDetail({
 
 function Fact({ label, value }: { label: string; value: string | number | null }) {
   return (
-    <>
+    <div>
       <dt>{label}</dt>
       <dd>{value === null || value === '' ? <span className="muted">Sin dato</span> : value}</dd>
-    </>
+    </div>
   );
+}
+
+function ageLabel(person: Person): string | null {
+  if (person.birthDate) {
+    const years = yearsSince(person.birthDate);
+    return `${years} ${years === 1 ? 'año' : 'años'}`;
+  }
+  if (person.ageAtIntake != null) {
+    return `${person.ageAtIntake} ${person.ageAtIntake === 1 ? 'año' : 'años'}, anotada en la atención`;
+  }
+  return null;
+}
+
+function representativeOf(person: Person): string | null {
+  if (!person.representativeName) return null;
+  return person.representativeBond
+    ? `${person.representativeName} · ${person.representativeBond}`
+    : person.representativeName;
 }
 
 function formatDate(value: string | null): string | null {

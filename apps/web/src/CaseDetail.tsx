@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { ageOf, isMinor } from '@ecolentes/shared';
 import {
   api,
   CHANNEL_LABELS,
@@ -16,11 +17,15 @@ import { CasePhotos } from './CasePhotos';
 export function CaseDetail({
   id,
   role,
+  backLabel,
   onBack,
+  onOpenPerson,
 }: {
   id: string;
   role: Role;
+  backLabel: string;
   onBack: () => void;
+  onOpenPerson: (personId: string) => void;
 }) {
   const [detail, setDetail] = useState<Detail | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -34,26 +39,65 @@ export function CaseDetail({
 
   useEffect(load, [load]);
 
-  if (error) return <p className="error">{error}</p>;
-  if (!detail) return <p className="muted">Abriendo el expediente…</p>;
+  if (error) {
+    return (
+      <div className="stack">
+        <Back link={backLabel} onBack={onBack} />
+        <p className="form-error" role="alert">{error}</p>
+      </div>
+    );
+  }
+  if (!detail) {
+    return (
+      <div className="stack">
+        <Back link={backLabel} onBack={onBack} />
+        <p className="muted" role="status">Abriendo el expediente…</p>
+      </div>
+    );
+  }
 
   const p = detail.person;
   // La óptica no tiene por qué ver quién es la persona.
   const hidePerson = role === 'OPTICIAN';
+  const age = hidePerson ? null : ageOf(p);
+  const menor = hidePerson ? null : isMinor(p);
+  const delivered = detail.glasses.filter((pair) => pair.deliveredAt).length;
+  const events = [...detail.events].sort((a, b) => b.occurredAt.localeCompare(a.occurredAt));
 
   return (
     <div className="stack">
-      <button type="button" className="link" onClick={onBack}>
-        ← Volver a la bandeja
-      </button>
+      <Back link={backLabel} onBack={onBack} />
+
+      <header className="page-head">
+        <h2>{detail.code}</h2>
+        <p className="muted">
+          {hidePerson ? (
+            <span className="masked">
+              {p.firstName[0]}
+              {p.lastName[0]} · la óptica ve sólo las iniciales
+            </span>
+          ) : (
+            <>
+              {p.lastName}, {p.firstName} · DNI {formatDni(p.dni)}
+              {age !== null ? ` · ${age} años` : ''}
+              {menor === true ? ' · menor de edad' : ''}
+            </>
+          )}
+        </p>
+        {!hidePerson && (
+          <button type="button" className="link" onClick={() => onOpenPerson(p.id)}>
+            Ver la ficha
+          </button>
+        )}
+      </header>
 
       <article className="card">
-        <div className="case-head">
-          <h2>{detail.code}</h2>
-          <span className="chip">{STAGE_LABELS[detail.stage]}</span>
+        <div className="case-status">
+          <span className="chip stage">{STAGE_LABELS[detail.stage]}</span>
           <span className={detail.overdue ? 'days late' : 'days'}>
-            {daysSince(detail.stageSince)} días en esta etapa
+            {stageStay(detail.stageSince)} · desde el {formatDate(detail.stageSince)}
           </span>
+          {detail.overdue && <span className="chip hold">Pasó el plazo</span>}
         </div>
 
         {detail.hold && (
@@ -62,40 +106,51 @@ export function CaseDetail({
           </p>
         )}
 
-        <dl className="facts">
-          <dt>Persona</dt>
-          <dd>
-            {hidePerson ? (
-              <span className="masked">
-                {p.firstName[0]}
-                {p.lastName[0]} · sólo iniciales
-              </span>
-            ) : (
-              <>
-                {p.lastName}, {p.firstName} · DNI {formatDni(p.dni)}
-              </>
-            )}
-          </dd>
+        <dl className="fact-grid flush">
           {!hidePerson && (
             <>
-              <dt>Contacto</dt>
-              <dd>{p.phone ?? <span className="muted">Sin teléfono</span>}</dd>
-              <dt>Barrio</dt>
-              <dd>{p.neighborhood ?? <span className="muted">Sin dato</span>}</dd>
+              <div>
+                <dt>Contacto</dt>
+                <dd>
+                  {p.phone ? (
+                    <a href={`tel:${p.phone.replace(/\s/g, '')}`}>{p.phone}</a>
+                  ) : (
+                    <span className="muted">Sin teléfono</span>
+                  )}
+                </dd>
+              </div>
+              <div>
+                <dt>Barrio</dt>
+                <dd>{p.neighborhood ?? <span className="muted">Sin dato</span>}</dd>
+              </div>
             </>
           )}
-          <dt>Llegó por</dt>
-          <dd>{CHANNEL_LABELS[detail.channel]}</dd>
+          <div>
+            <dt>Llegó por</dt>
+            <dd>{CHANNEL_LABELS[detail.channel]}</dd>
+          </div>
           {!hidePerson && (
-            <>
+            <div>
               <dt>Óptica</dt>
               <dd>{detail.optician?.name ?? <span className="muted">Sin asignar</span>}</dd>
-            </>
+            </div>
           )}
-          <dt>Pares</dt>
-          <dd>{detail.pairs}</dd>
+          <div>
+            <dt>Pares</dt>
+            <dd>
+              {delivered} de {detail.pairs} {detail.pairs === 1 ? 'par entregado' : 'pares entregados'}
+            </dd>
+          </div>
         </dl>
+        {detail.reason && (
+          <p className="reason">
+            <span className="muted">Para qué los pidió. </span>
+            {detail.reason}
+          </p>
+        )}
       </article>
+
+      <CaseActions detail={detail} role={role} onDone={load} />
 
       {detail.glasses.length > 0 && (
         <article className="card">
@@ -109,10 +164,10 @@ export function CaseDetail({
               <li key={pair.code}>
                 <strong className="mono">{pair.code}</strong>
                 <span>{pair.kind === 'CERCA' ? 'Cerca' : 'Lejos'}</span>
-                <span className={pair.deliveredAt ? 'chip' : 'muted'}>
+                <span className={pair.deliveredAt ? 'chip stage' : 'muted'}>
                   {pair.deliveredAt
                     ? `Entregado el ${formatDate(pair.deliveredAt)}`
-                    : 'En el municipio'}
+                    : 'Todavía no se entregó'}
                 </span>
               </li>
             ))}
@@ -124,24 +179,32 @@ export function CaseDetail({
         <article className="card">
           <h3>Receta</h3>
           <p className="mono">{detail.prescription.rawText}</p>
-          <dl className="facts">
-            <dt>Ojo derecho</dt>
-            <dd>{eye(detail.prescription.farRightSphere, detail.prescription.farRightCylinder, detail.prescription.farRightAxis)}</dd>
-            <dt>Ojo izquierdo</dt>
-            <dd>{eye(detail.prescription.farLeftSphere, detail.prescription.farLeftCylinder, detail.prescription.farLeftAxis)}</dd>
-            <dt>Cerca</dt>
-            <dd>
+          <dl className="fact-grid flush">
+            <div>
+              <dt>Ojo derecho</dt>
+              <dd>{eye(detail.prescription.farRightSphere, detail.prescription.farRightCylinder, detail.prescription.farRightAxis)}</dd>
+            </div>
+            <div>
+              <dt>Ojo izquierdo</dt>
+              <dd>{eye(detail.prescription.farLeftSphere, detail.prescription.farLeftCylinder, detail.prescription.farLeftAxis)}</dd>
+            </div>
+            <div>
+              <dt>Cerca</dt>
+              <dd>
               {detail.prescription.nearAddition != null ? (
                 `ADD ${detail.prescription.nearAddition}`
               ) : (
                 <span className="muted">Sin adición</span>
               )}
-            </dd>
+              </dd>
+            </div>
           </dl>
-          <p className={detail.prescription.validatedAt ? 'muted' : 'error'}>
-            {detail.prescription.validatedAt
-              ? 'Validada por el profesional.'
-              : 'Falta que la valide el profesional.'}
+          <p>
+            {detail.prescription.validatedAt ? (
+              <span className="chip stage">Validada por el profesional</span>
+            ) : (
+              <span className="chip hold">Falta que la valide el profesional</span>
+            )}
           </p>
         </article>
       )}
@@ -161,7 +224,7 @@ export function CaseDetail({
                 <span>
                   {q.lenses} · {q.frame}
                   {q.leadDays != null ? ` · ${q.leadDays} días` : ''}
-                  {q.amount != null ? ` · $${q.amount}` : ''}
+                  {q.amount != null ? ` · ${money(q.amount)}` : ''}
                 </span>
                 {q.decisionNote && <span className="muted">{q.decisionNote}</span>}
               </li>
@@ -174,7 +237,7 @@ export function CaseDetail({
         <article className="card">
           <h3>Entrega</h3>
           <p>
-            {new Date(detail.delivery.deliveredAt).toLocaleDateString('es-AR')} · retiró{' '}
+            {formatDate(detail.delivery.deliveredAt)} · retiró{' '}
             {detail.delivery.receivedBy}
             {detail.delivery.isRepresentative
               ? ` (${detail.delivery.receivedByDni ? `DNI ${formatDni(detail.delivery.receivedByDni)}` : 'representante'})`
@@ -184,12 +247,13 @@ export function CaseDetail({
         </article>
       )}
 
-      <CaseActions detail={detail} role={role} onDone={load} />
-
       <article className="card">
         <h3>Historial</h3>
+        {events.length === 0 ? (
+          <p className="muted">Todavía no hay movimientos.</p>
+        ) : (
         <ul className="history">
-          {detail.events.map((e) => (
+          {events.map((e) => (
             <li key={e.id}>
               <span className="when">
                 {new Date(e.occurredAt).toLocaleString('es-AR', {
@@ -202,7 +266,7 @@ export function CaseDetail({
                   ? `${STAGE_LABELS[e.fromStage]} → ${STAGE_LABELS[e.toStage]}`
                   : e.hold
                     ? HOLD_LABELS[e.hold]
-                    : (e.note ?? '—')}
+                    : (e.note ?? 'Movimiento registrado')}
               </span>
               <span className="muted">
                 {e.username ?? 'sistema'}
@@ -211,6 +275,7 @@ export function CaseDetail({
             </li>
           ))}
         </ul>
+        )}
       </article>
     </div>
   );
@@ -221,6 +286,29 @@ const QUOTE_LABELS = {
   APPROVED: 'Aprobada',
   OBSERVED: 'Observada',
 } as const;
+
+function Back({ link, onBack }: { link: string; onBack: () => void }) {
+  return (
+    <nav aria-label="Volver">
+      <button type="button" className="link" onClick={onBack}>
+        ← {link}
+      </button>
+    </nav>
+  );
+}
+
+function stageStay(iso: string): string {
+  const days = daysSince(iso);
+  if (days <= 0) return 'Hoy en esta etapa';
+  if (days === 1) return '1 día en esta etapa';
+  return `${days} días en esta etapa`;
+}
+
+function money(amount: string): string {
+  const value = Number(amount);
+  if (Number.isNaN(value)) return amount;
+  return value.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' });
+}
 
 function eye(sphere: string | null, cylinder: string | null, axis: number | null) {
   if (sphere === null && cylinder === null && axis === null) {

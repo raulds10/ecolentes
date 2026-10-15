@@ -97,10 +97,13 @@ export function Users({ me }: { me: { id: string } }) {
   }
 
   return (
-    <section className="panel">
-      <h2>Usuarios</h2>
+    <section className="stack">
+      <header className="page-head">
+        <h2>Usuarios</h2>
+        <p className="muted">Quién entra, y con qué perfil ve los datos de salud.</p>
+      </header>
 
-      <form className="form" onSubmit={create}>
+      <form className="card user-form" onSubmit={create}>
         <h3>Dar de alta</h3>
         <div className="row">
           <label>

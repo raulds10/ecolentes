@@ -11,13 +11,18 @@ type Props = { detail: CaseDetail; role: Role; onDone: () => void };
  */
 export function CaseActions({ detail, role, onDone }: Props) {
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [confirmClose, setConfirmClose] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  async function run(action: () => Promise<unknown>) {
+  async function run(action: () => Promise<unknown>, done = 'Quedó guardado.') {
     setBusy(true);
     setError(null);
+    setNotice(null);
     try {
       await action();
+      setNotice(done);
+      setConfirmClose(false);
       onDone();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo hacer');
@@ -32,7 +37,16 @@ export function CaseActions({ detail, role, onDone }: Props) {
   return (
     <div className="card">
       <h3>Próximo paso</h3>
-      {error && <p className="error">{error}</p>}
+      {error && (
+        <p className="form-error" role="alert">
+          {error}
+        </p>
+      )}
+      {notice && !error && (
+        <p className="form-ok" role="status">
+          {notice}
+        </p>
+      )}
 
       {detail.stage === 'REQUEST' && can('OPERATOR') && (
         <ActionButton
@@ -75,11 +89,29 @@ export function CaseActions({ detail, role, onDone }: Props) {
       )}
 
       {detail.stage === 'DELIVERED' && can('OPERATOR') && (
-        <ActionButton
-          busy={busy}
-          label="Cerrar el expediente"
-          onClick={() => run(() => api.moveStage(detail.id, 'CLOSED'))}
-        />
+        confirmClose ? (
+          <div className="stack-tight">
+            <p>Se cierra el expediente y deja de figurar como pendiente.</p>
+            <div className="actions">
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() =>
+                  void run(() => api.moveStage(detail.id, 'CLOSED'), 'El expediente quedó cerrado.')
+                }
+              >
+                {busy ? 'Guardando…' : 'Cerrar'}
+              </button>
+              <button type="button" className="secondary" disabled={busy} onClick={() => setConfirmClose(false)}>
+                Cancelar
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button type="button" disabled={busy} onClick={() => setConfirmClose(true)}>
+            Cerrar el expediente
+          </button>
+        )
       )}
 
       {detail.stage === 'CLOSED' && <p className="muted">El expediente está cerrado.</p>}
@@ -205,7 +237,7 @@ function QuoteForm({
           <input id="armazon" value={frame} onChange={(e) => setFrame(e.target.value)} required />
         </div>
         <div>
-          <label htmlFor="plazo">Días de fabricación</label>
+          <label htmlFor="plazo">Días de fabricación (opcional)</label>
           <input
             id="plazo"
             type="number"
@@ -215,7 +247,7 @@ function QuoteForm({
           />
         </div>
         <div>
-          <label htmlFor="monto">Monto</label>
+          <label htmlFor="monto">Monto (opcional)</label>
           <input
             id="monto"
             type="number"
@@ -246,7 +278,7 @@ function ApprovalForm({
 
   return (
     <div className="stack-tight">
-      <label htmlFor="observacion">Qué corregir, si la observás</label>
+      <label htmlFor="observacion">Qué corregir (hace falta sólo para observar)</label>
       <input
         id="observacion"
         value={note}
@@ -362,7 +394,7 @@ function DeliveryForm({
 
       {isRepresentative && (
         <>
-          <label htmlFor="dni-retira">DNI de quien retira</label>
+          <label htmlFor="dni-retira">DNI de quien retira (opcional)</label>
           <input
             id="dni-retira"
             value={receivedByDni}

@@ -27,6 +27,8 @@ export type Person = {
   notes: string | null;
   createdAt: string;
   updatedAt: string;
+  /** Foto del frente del DNI, si este rol puede verla y hay una cargada. */
+  dniFrontId?: string | null;
 };
 
 /** Un par de anteojos. El código es lo que la persona tiene en la mano. */
@@ -466,12 +468,14 @@ export const api = {
     q?: string;
     neighborhood?: string;
     overdue?: boolean;
+    take?: number;
   }) {
     const search = new URLSearchParams();
     if (params.stage) search.set('stage', params.stage);
     if (params.q) search.set('q', params.q);
     if (params.neighborhood) search.set('neighborhood', params.neighborhood);
     if (params.overdue) search.set('overdue', 'true');
+    if (params.take) search.set('take', String(params.take));
     return request<CaseSummary[]>(`/expedientes?${search.toString()}`);
   },
   case(id: string) {

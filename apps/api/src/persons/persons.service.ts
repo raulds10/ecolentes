@@ -1,6 +1,6 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { AuditAction, CaseStage, Prisma, type Person } from '@prisma/client';
-import { isMinor, isOverdue, ageOf } from '@ecolentes/shared';
+import { AttachmentKind, AuditAction, CaseStage, Prisma, type Person } from '@prisma/client';
+import { isMinor, isOverdue, ageOf, seesAttachment } from '@ecolentes/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { normalizeDni } from '../common/dni';
@@ -86,7 +86,7 @@ export class PersonsService {
     return this.prisma.person.findUnique({ where: { dni: normalizeDni(dni) } });
   }
 
-  async findById(id: string, viewer: AuthenticatedUser): Promise<Person> {
+  async findById(id: string, viewer: AuthenticatedUser): Promise<Person & { dniFrontId: string | null }> {
     const person = await this.prisma.person.findUnique({ where: { id } });
     if (!person) throw new NotFoundException('No existe esa ficha');
 
@@ -98,7 +98,16 @@ export class PersonsService {
       username: viewer.username,
     });
 
-    return person;
+    // La foto del frente es de la ficha, no de un expediente. Quien no puede
+    // verla no recibe ni el id: desde acá no hay forma de pedirla.
+    const dniFront = seesAttachment(viewer.role, 'DNI_FRONT')
+      ? await this.prisma.attachment.findFirst({
+          where: { personId: person.id, kind: AttachmentKind.DNI_FRONT },
+          select: { id: true },
+        })
+      : null;
+
+    return { ...person, dniFrontId: dniFront?.id ?? null };
   }
 
   async create(dto: CreatePersonDto, author: AuthenticatedUser): Promise<Person> {

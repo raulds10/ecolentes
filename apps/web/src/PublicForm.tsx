@@ -63,8 +63,8 @@ export function PublicForm() {
         <h1>Pedido de anteojos</h1>
         <p className="muted">
           Programa Ecolentes · Dirección de Salud de la Municipalidad de San Miguel de Tucumán.
-          Dejanos tus datos y te llamamos para darte un turno con el oftalmólogo.
         </p>
+        <p>Dejanos tus datos y te llamamos para darte un turno con el oftalmólogo.</p>
 
         <div>
           <label htmlFor="p-dni">DNI</label>

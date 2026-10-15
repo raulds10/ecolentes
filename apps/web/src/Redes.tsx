@@ -95,12 +95,15 @@ export function Redes({ onOpen }: { onOpen: (caseId: string) => void }) {
 
   return (
     <div className="stack">
-      <div className="card stack-tight">
-        <h2>Cargar un pedido que llegó por redes</h2>
+      <header className="page-head">
+        <h2>Redes</h2>
         <p className="muted">
           Lo que cargues acá abre un expediente igual que el de territorio. Si la persona prefiere
           escribir sus datos, pasale el link del formulario.
         </p>
+      </header>
+      <div className="card stack-tight">
+        <h3>Cargar un pedido</h3>
 
         <form
           className="stack-tight"

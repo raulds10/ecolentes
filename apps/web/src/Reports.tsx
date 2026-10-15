@@ -31,13 +31,14 @@ export function Reports({ role, onOpen }: { role: Role; onOpen: (caseId: string)
 
   return (
     <div className="stack">
-      <div className="card stack-tight no-print">
-        <h2>Indicadores y reportes</h2>
+      <header className="page-head no-print">
+        <h2>Indicadores</h2>
         <p className="muted">
           Cada número sale de los expedientes, así que se puede abrir y ver de dónde salió.
           {!nominal && ' Tu rol ve los totales y el seguimiento, sin la identidad de las personas.'}
         </p>
-        <nav className="tabs">
+      </header>
+      <nav className="tabs view-tabs no-print" aria-label="Reportes">
           {tabs.map((t) => (
             <button
               key={t.key}
@@ -48,8 +49,7 @@ export function Reports({ role, onOpen }: { role: Role; onOpen: (caseId: string)
               {t.label}
             </button>
           ))}
-        </nav>
-      </div>
+      </nav>
 
       {tab === 'resumen' && <SummaryView />}
       {tab === 'entregas' && <DeliveriesView onOpen={onOpen} />}

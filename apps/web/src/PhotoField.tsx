@@ -89,7 +89,12 @@ export function PhotoField({
           </div>
         </div>
       ) : (
-        (working || hint) && <p className="muted">{working ? 'Preparando la foto…' : hint}</p>
+        <>
+          {(working || hint) && <p className="muted">{working ? 'Preparando la foto…' : hint}</p>}
+          <label className="button secondary" htmlFor={id}>
+            {working ? 'Preparando…' : 'Sacar o elegir foto'}
+          </label>
+        </>
       )}
       <input
         id={id}
@@ -97,7 +102,7 @@ export function PhotoField({
         accept="image/*"
         // En el teléfono abre la cámara directamente; en la computadora, los archivos.
         capture="environment"
-        className={value ? 'hidden' : ''}
+        className="hidden"
         onChange={(e) => void take(e.target.files?.[0])}
       />
       {error && <p className="error">{error}</p>}

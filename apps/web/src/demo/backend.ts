@@ -354,7 +354,13 @@ export function installDemoBackend(): void {
     if (route.startsWith('/personas/') && method === 'GET') {
       const found = state.people.find((p) => p.id === route.split('/')[2]);
       if (!found) throw new DemoError('No existe esa ficha', 404);
-      return found;
+      const front = state.cases
+        .flatMap((c) => c.attachments)
+        .find((a) => a.kind === 'DNI_FRONT' && a.personId === found.id);
+      return {
+        ...found,
+        dniFrontId: seesAttachment(session.role, 'DNI_FRONT') ? (front?.id ?? null) : null,
+      };
     }
     if (route === '/personas' && method === 'POST') {
       const dni = digits(str(body.dni));

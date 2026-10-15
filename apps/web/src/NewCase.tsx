@@ -109,8 +109,11 @@ export function NewCase({ onCreated }: { onCreated: (caseId: string) => void }) 
 
   return (
     <div className="stack phone">
-      <form className="card" onSubmit={lookUp}>
+      <header className="page-head">
         <h2>Pedido nuevo</h2>
+        <p className="muted">Primero el DNI. Si la persona ya tiene ficha, no se vuelve a cargar.</p>
+      </header>
+      <form className="card" onSubmit={lookUp}>
         <label htmlFor="dni">DNI de la persona</label>
         <div className="row">
           <input

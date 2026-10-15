@@ -86,6 +86,10 @@ export function Search({ onOpen, onOpenCase }: Props) {
 
   return (
     <div className="stack">
+      <header className="page-head">
+        <h2>Personas</h2>
+        <p className="muted">La ficha única, con el expediente y los anteojos a la vista.</p>
+      </header>
       <div className="card search">
         <label htmlFor="q">Buscar por DNI, apellido o nombre</label>
         <input
@@ -132,7 +136,7 @@ export function Search({ onOpen, onOpenCase }: Props) {
                 <th>Persona</th>
                 <th>Expediente en curso</th>
                 <th>Anteojos</th>
-                <th className="num">Edad</th>
+                <th>Edad</th>
                 <th>Barrio</th>
               </tr>
             </thead>
@@ -192,65 +196,76 @@ function Row({
 }) {
   const { summary } = person;
   const open = summary.openCase;
+  const daysOpen = open ? daysSince(open.stageSince) : null;
 
   return (
     <tr className="clickable" onClick={onOpen}>
-      <td>
-        <strong>
-          {person.lastName}, {person.firstName}
-        </strong>
-        <br />
-        <span className="muted">DNI {formatDni(person.dni)}</span>
+      <td data-label="Persona">
+        <span className="person-id">
+          <strong>
+            {person.lastName}, {person.firstName}
+          </strong>
+          <span className="muted">DNI {formatDni(person.dni)}</span>
+        </span>
       </td>
-      <td>
+      <td data-label="Expediente en curso">
         {open ? (
           <button
             type="button"
-            className="link"
+            className="link case-link"
             onClick={(event) => {
               event.stopPropagation();
               onOpenCase(open.id);
             }}
           >
             <strong>{open.code}</strong>
-            <br />
-            {STAGE_LABELS[open.stage]}{' '}
-            <span className={open.overdue ? 'days late' : 'days'}>
-              hace {daysSince(open.stageSince)} d
+            <span className="case-meta">
+              <span className="chip">{STAGE_LABELS[open.stage]}</span>
+              <span className={open.overdue ? 'days late' : 'days'}>
+                hace {daysOpen} {daysOpen === 1 ? 'día' : 'días'}
+              </span>
             </span>
             {open.hold && <span className="chip hold">{HOLD_LABELS[open.hold]}</span>}
-            {open.glasses.length > 0 && (
-              <>
-                <br />
-                <span className="muted">{open.glasses.map((pair) => pair.code).join(' · ')}</span>
-              </>
-            )}
           </button>
         ) : (
-          <span className="muted">—</span>
+          <span className="muted">Sin expediente abierto</span>
         )}
       </td>
-      <td>
+      <td data-label="Anteojos">
         {summary.cases === 0 ? (
           <span className="muted">Nunca pidió</span>
         ) : (
-          <>
-            {summary.pairsDelivered} de {summary.pairsRequested}{' '}
-            {summary.pairsRequested === 1 ? 'par entregado' : 'pares entregados'}
-            {summary.lastDeliveryAt && (
-              <>
-                <br />
-                <span className="muted">último el {formatDate(summary.lastDeliveryAt)}</span>
-              </>
+          <span className="glasses-summary">
+            {open && open.glasses.length > 0 && (
+              <span className="pair-codes">
+                {open.glasses.map((pair) => (
+                  <span key={pair.code}>{pair.code}</span>
+                ))}
+              </span>
             )}
-          </>
+            <span>
+              {summary.pairsDelivered} de {summary.pairsRequested}{' '}
+              {summary.pairsRequested === 1 ? 'par entregado' : 'pares entregados'}
+            </span>
+            {summary.lastDeliveryAt && (
+              <span className="muted">último el {formatDate(summary.lastDeliveryAt)}</span>
+            )}
+          </span>
         )}
       </td>
-      <td className="num">
-        {summary.age ?? <span className="muted">—</span>}
-        {summary.isMinor === true && <span className="chip">menor</span>}
+      <td data-label="Edad">
+        <span className="age">
+          {summary.age == null ? (
+            <span className="muted">Sin edad</span>
+          ) : (
+            <span>
+              {summary.age} {summary.age === 1 ? 'año' : 'años'}
+            </span>
+          )}
+          {summary.isMinor === true && <span className="chip">menor</span>}
+        </span>
       </td>
-      <td>{person.neighborhood ?? <span className="muted">—</span>}</td>
+      <td data-label="Barrio">{person.neighborhood ?? <span className="muted">Sin barrio</span>}</td>
     </tr>
   );
 }
