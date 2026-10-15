@@ -1,3 +1,5 @@
+import type { Evolution, EvolutionPeriod } from '@ecolentes/shared';
+
 export type Role =
   | 'OPERATOR'
   | 'OPHTHALMOLOGIST'
@@ -282,6 +284,8 @@ export type PendingReport = {
   byNeighborhood: { neighborhood: string; pairs: number; rows: PendingRow[] }[];
   atOptician: PendingRow[];
 };
+
+export type { Evolution, EvolutionBucket, EvolutionPeriod } from '@ecolentes/shared';
 
 export type PersonReport = {
   id: string;
@@ -570,6 +574,9 @@ export const api = {
   },
   pendingReport() {
     return request<PendingReport>('/reportes/pendientes');
+  },
+  evolutionReport(period: EvolutionPeriod) {
+    return request<Evolution>(`/reportes/evolucion?periodo=${period}`);
   },
   personReport(q: string, reason: string) {
     const search = new URLSearchParams({ q });

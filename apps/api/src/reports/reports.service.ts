@@ -1,12 +1,18 @@
 import { ForbiddenException, Injectable } from '@nestjs/common';
 import { AuditAction, CaseStage, Prisma } from '@prisma/client';
-import { isOverdue, seesIdentityInReports, suppressSmallCell } from '@ecolentes/shared';
+import {
+  buildEvolution,
+  evolutionSince,
+  isOverdue,
+  seesIdentityInReports,
+  suppressSmallCell,
+} from '@ecolentes/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { normalizeDni } from '../common/dni';
 import { searchText } from '../common/search-text';
 import type { AuthenticatedUser } from '../common/current-user';
-import type { DeliveriesDto, PersonReportDto, SummaryDto } from './dto';
+import type { DeliveriesDto, EvolutionDto, PersonReportDto, SummaryDto } from './dto';
 
 /** Etapas en las que el expediente ya terminó su recorrido. */
 const CLOSED_STAGES: CaseStage[] = [CaseStage.DELIVERED, CaseStage.CLOSED];
@@ -289,6 +295,55 @@ export class ReportsService {
         .sort((a, b) => b.pairs - a.pairs),
       atOptician: atOptician.map(row),
     };
+  }
+
+  /**
+   * Cuántos pares se entregaron, cuántos llegaron y cuántos quedaban en el
+   * municipio, semana a semana o mes a mes. Son totales sin nombres, así que
+   * lo ven todos los roles que entran a los reportes.
+   */
+  async evolution(params: EvolutionDto, viewer: AuthenticatedUser) {
+    const period = params.periodo ?? 'semana';
+    const since = evolutionSince(period);
+
+    // Interesan los que se entregaron en la ventana y los que pasaron alguna
+    // vez por el municipio: con eso alcanza para reconstruir la caja.
+    const cases = await this.prisma.case.findMany({
+      where: {
+        OR: [
+          { delivery: { is: { deliveredAt: { gte: since } } } },
+          { events: { some: { toStage: { in: IN_HOUSE_STAGES } } } },
+        ],
+      },
+      select: {
+        pairs: true,
+        delivery: { select: { deliveredAt: true } },
+        _count: { select: { glasses: true } },
+        events: {
+          where: { toStage: { not: null } },
+          select: { toStage: true, occurredAt: true },
+        },
+      },
+    });
+
+    await this.audit.record({
+      action: AuditAction.VIEW,
+      entity: 'Report',
+      entityId: 'evolucion',
+      userId: viewer.id,
+      username: viewer.username,
+      changes: { periodo: period },
+    });
+
+    return buildEvolution(
+      period,
+      cases.map((c) => ({
+        pairs: c.pairs,
+        stockPairs: c._count.glasses || c.pairs,
+        deliveredAt: c.delivery?.deliveredAt ?? null,
+        events: c.events,
+      })),
+    );
   }
 
   /**

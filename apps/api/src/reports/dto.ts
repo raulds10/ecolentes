@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
-import { IsBooleanString, IsISO8601, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsBooleanString, IsIn, IsISO8601, IsOptional, IsString, MinLength } from 'class-validator';
+import { EVOLUTION_PERIODS, type EvolutionPeriod } from '@ecolentes/shared';
 
 export class SummaryDto {
   /**
@@ -37,4 +38,11 @@ export class PersonReportDto {
   @IsOptional()
   @IsString()
   reason?: string;
+}
+
+export class EvolutionDto {
+  /** Cómo se corta la serie: por semana o por mes. */
+  @IsOptional()
+  @IsIn(EVOLUTION_PERIODS, { message: 'El período es "semana" o "mes"' })
+  periodo?: EvolutionPeriod;
 }

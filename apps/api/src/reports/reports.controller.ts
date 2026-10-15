@@ -1,7 +1,7 @@
 import { Controller, Get, Query } from '@nestjs/common';
 import { Role } from '@prisma/client';
 import { ReportsService } from './reports.service';
-import { DeliveriesDto, PersonReportDto, SummaryDto } from './dto';
+import { DeliveriesDto, EvolutionDto, PersonReportDto, SummaryDto } from './dto';
 import { Roles } from '../auth/roles.decorator';
 import { CurrentUser, type AuthenticatedUser } from '../common/current-user';
 
@@ -22,6 +22,11 @@ export class ReportsController {
   @Get('entregas')
   deliveries(@Query() query: DeliveriesDto, @CurrentUser() user: AuthenticatedUser) {
     return this.reports.deliveries(query, user);
+  }
+
+  @Get('evolucion')
+  evolution(@Query() query: EvolutionDto, @CurrentUser() user: AuthenticatedUser) {
+    return this.reports.evolution(query, user);
   }
 
   @Get('pendientes')

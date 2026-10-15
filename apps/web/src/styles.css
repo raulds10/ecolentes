@@ -797,6 +797,68 @@ main:has(table.report) { max-width: 76rem; }
 .bar .fill.late { background: var(--danger); }
 .bar b { font-size: 0.9rem; text-align: right; font-variant-numeric: tabular-nums; }
 
+/* Evolución por semana o por mes: una columna por período. */
+.colchart {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 0.35rem;
+  height: 11rem;
+  padding-top: 0.25rem;
+}
+.col {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  justify-items: center;
+  min-width: 0;
+  border-radius: 6px;
+  outline: none;
+}
+.col:hover, .col:focus-visible { background: var(--bg); }
+.col:focus-visible { box-shadow: 0 0 0 2px var(--accent); }
+.col-value { font-size: 0.78rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.col-track {
+  display: flex;
+  align-items: flex-end;
+  width: 100%;
+  max-width: 2.4rem;
+  border-bottom: 1px solid var(--line);
+}
+.col-fill {
+  width: 100%;
+  min-height: 0;
+  background: var(--accent);
+  border-radius: 4px 4px 0 0;
+}
+/* El período en curso todavía no terminó: rayado, para no leerlo como una caída. */
+.col.current .col-fill {
+  background: repeating-linear-gradient(135deg, var(--accent) 0 4px, #8fbfb8 4px 7px);
+}
+.col-label {
+  font-size: 0.72rem;
+  color: var(--muted);
+  white-space: nowrap;
+  padding-top: 0.2rem;
+}
+.col-tip {
+  display: none;
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 2;
+  width: max-content;
+  max-width: 15rem;
+  padding: 0.4rem 0.55rem;
+  background: var(--fg);
+  color: #fff;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  pointer-events: none;
+}
+.col:nth-child(n + 7) .col-tip { left: auto; right: 0; }
+.col:hover .col-tip, .col:focus-visible .col-tip { display: block; }
+
 .sr-only {
   position: absolute;
   width: 1px;
@@ -920,6 +982,8 @@ table.people button.link strong { text-decoration: underline; }
   .intake-row { grid-template-columns: 1fr auto; }
   .bar { grid-template-columns: 7rem 1fr 1.8rem; }
   .bar-label { font-size: 0.78rem; }
+  .colchart { gap: 0.15rem; }
+  .col:nth-child(even) .col-label { visibility: hidden; }
   /* Mejor que apretar las columnas hasta que no se lean. */
   .card.stack-tight { overflow-x: auto; }
   table.report { min-width: 28rem; }

@@ -1,9 +1,11 @@
 import {
   ageOf,
   attachmentBelongsToPerson,
+  buildEvolution,
   canMove,
   canUploadAttachment,
   glassesKindsFromText,
+  isEvolutionPeriod,
   isMinor,
   isOverdue,
   pairsFromText,
@@ -882,6 +884,22 @@ export function installDemoBackend(): void {
                 : 'Titular',
           })),
         };
+      }
+
+      if (route === '/reportes/evolucion') {
+        const period = params.get('periodo') ?? 'semana';
+        if (!isEvolutionPeriod(period)) {
+          throw new DemoError('El período es "semana" o "mes"', 400);
+        }
+        return buildEvolution(
+          period,
+          state.cases.map((c) => ({
+            pairs: c.pairs,
+            stockPairs: c.glasses.length || c.pairs,
+            deliveredAt: c.delivery?.deliveredAt ?? null,
+            events: c.events,
+          })),
+        );
       }
 
       if (route === '/reportes/pendientes') {
