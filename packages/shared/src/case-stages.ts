@@ -5,10 +5,10 @@
 export const CASE_STAGES = [
   { key: 'REQUEST', label: 'Solicitud' },
   { key: 'ASSESSMENT', label: 'Evaluación y receta' },
-  { key: 'OPTICIAN_QUOTE', label: 'Propuesta óptica' },
-  { key: 'APPROVAL', label: 'Aprobación' },
+  { key: 'OPTICIAN_QUOTE', label: 'Pedido de compra' },
+  { key: 'APPROVAL', label: 'Orden de compra' },
   { key: 'PRODUCTION', label: 'Producción' },
-  { key: 'RECEIVED', label: 'Recepción municipal' },
+  { key: 'RECEIVED', label: 'Depósito' },
   { key: 'READY_FOR_PICKUP', label: 'Para entregar' },
   { key: 'DELIVERED', label: 'Entregado' },
   { key: 'CLOSED', label: 'Cerrado' },

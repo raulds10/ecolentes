@@ -14,6 +14,9 @@ import {
 import { CaseActions } from './CaseActions';
 import { CasePhotos } from './CasePhotos';
 
+const OPTICA_WORK = new Set(['PRODUCTION']);
+const CLIENT_DELIVERY = new Set(['READY_FOR_PICKUP', 'DELIVERED', 'CLOSED']);
+
 export function CaseDetail({
   id,
   role,
@@ -70,7 +73,7 @@ export function CaseDetail({
 
       <header className="page-head">
         <h2>{detail.code}</h2>
-        <p className="muted">
+        <p className="case-who">
           {hidePerson ? (
             <span className="masked">
               {p.firstName[0]}
@@ -91,12 +94,17 @@ export function CaseDetail({
         )}
       </header>
 
-      <article className="card">
+      <article className="card case-brief">
         <div className="case-status">
-          <span className="chip stage">{STAGE_LABELS[detail.stage]}</span>
-          <span className={detail.overdue ? 'days late' : 'days'}>
-            {stageStay(detail.stageSince)} · desde el {formatDate(detail.stageSince)}
-          </span>
+          <div>
+            {OPTICA_WORK.has(detail.stage) && <p className="stage-owner">Óptica</p>}
+            {CLIENT_DELIVERY.has(detail.stage) && <p className="stage-owner">Entrega al cliente</p>}
+            <h3>{STAGE_LABELS[detail.stage]}</h3>
+            <p className={detail.overdue ? 'stage-time late' : 'stage-time'}>
+              {stageStay(detail.stageSince)}
+            </p>
+            <p className="stage-since">desde el {formatDate(detail.stageSince)}</p>
+          </div>
           {detail.overdue && <span className="chip hold">Pasó el plazo</span>}
         </div>
 
@@ -106,7 +114,7 @@ export function CaseDetail({
           </p>
         )}
 
-        <dl className="fact-grid flush">
+        <dl className="fact-grid case-facts">
           {!hidePerson && (
             <>
               <div>
@@ -143,10 +151,10 @@ export function CaseDetail({
           </div>
         </dl>
         {detail.reason && (
-          <p className="reason">
-            <span className="muted">Para qué los pidió. </span>
-            {detail.reason}
-          </p>
+          <div className="reason">
+            <p>Para qué los pidió</p>
+            <p>{detail.reason}</p>
+          </div>
         )}
       </article>
 
@@ -211,25 +219,42 @@ export function CaseDetail({
 
       <CasePhotos detail={detail} role={role} onChange={load} />
 
-      {detail.quotes.length > 0 && (
+      {(detail.quotes.length > 0 ||
+        detail.stage === 'OPTICIAN_QUOTE' ||
+        detail.stage === 'APPROVAL') && (
         <article className="card">
-          <h3>Propuestas de la óptica</h3>
+          <h3>{detail.stage === 'OPTICIAN_QUOTE' ? 'Pedido de compra' : 'Orden de compra'}</h3>
+          <p className="muted">
+            {detail.stage === 'OPTICIAN_QUOTE'
+              ? `El presupuesto lo genera ${detail.optician?.name ?? 'la óptica'}. Con ese presupuesto se arma la orden de compra.`
+              : `Esto es lo que se aprueba. El presupuesto lo generó ${detail.optician?.name ?? 'la óptica'}.`}
+          </p>
+          {detail.quotes.length === 0 ? (
+            <p>Todavía no hay presupuesto.</p>
+          ) : (
           <ul className="quotes">
-            {detail.quotes.map((q) => (
+            {[...detail.quotes]
+              .sort((a, b) => b.version - a.version)
+              .map((q) => (
               <li key={q.id} className={q.status === 'OBSERVED' ? 'observed' : ''}>
                 <div className="quote-head">
-                  <strong>Versión {q.version}</strong>
+                  <strong>
+                    Presupuesto de {detail.optician?.name ?? 'la óptica'}
+                  </strong>
                   <span className="chip">{QUOTE_LABELS[q.status]}</span>
                 </div>
+                <span className="budget-amount">
+                  {q.amount != null ? money(q.amount) : 'Sin monto'}
+                </span>
                 <span>
-                  {q.lenses} · {q.frame}
+                  Versión {q.version} · {q.lenses} · {q.frame}
                   {q.leadDays != null ? ` · ${q.leadDays} días` : ''}
-                  {q.amount != null ? ` · ${money(q.amount)}` : ''}
                 </span>
                 {q.decisionNote && <span className="muted">{q.decisionNote}</span>}
               </li>
             ))}
           </ul>
+          )}
         </article>
       )}
 

@@ -24,11 +24,13 @@ const ACTION_LABELS: Record<AuditEntry['action'], string> = {
 export function PersonDetail({
   id,
   role,
+  backLabel,
   onBack,
   onOpenCase,
 }: {
   id: string;
   role: Role;
+  backLabel: string;
   onBack: () => void;
   onOpenCase: (id: string) => void;
 }) {
@@ -67,7 +69,7 @@ export function PersonDetail({
   return (
     <div className="stack">
       <button type="button" className="link" onClick={onBack}>
-        ← Volver a buscar
+        ← {backLabel}
       </button>
 
       <article className="card person-sheet">

@@ -41,7 +41,7 @@ export function isOverdue(stage: CaseStage, since: Date, now: Date = new Date())
  */
 export const CASE_HOLDS = {
   MISSING_DOCUMENTS: 'Falta documentación',
-  QUOTE_OBSERVED: 'Propuesta observada',
+  QUOTE_OBSERVED: 'Presupuesto observado',
   REJECTED: 'Rechazado',
   DELAYED: 'Demorado',
   NOT_LOCATED: 'No se pudo ubicar a la persona',

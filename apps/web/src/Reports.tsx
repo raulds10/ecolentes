@@ -15,46 +15,20 @@ import {
   type Summary,
 } from './lib/api';
 
-type Tab = 'resumen' | 'entregas' | 'pendientes' | 'persona';
-
-const TABS: { key: Tab; label: string; nominal: boolean }[] = [
-  { key: 'resumen', label: 'Resumen', nominal: false },
-  { key: 'entregas', label: 'Padrón de entregas', nominal: false },
-  { key: 'pendientes', label: 'Pendientes de entrega', nominal: false },
-  { key: 'persona', label: 'Por persona', nominal: true },
-];
-
-export function Reports({ role, onOpen }: { role: Role; onOpen: (caseId: string) => void }) {
+export function Reports({ role }: { role: Role }) {
   const nominal = seesIdentityInReports(role);
-  const [tab, setTab] = useState<Tab>('resumen');
-  const tabs = TABS.filter((t) => !t.nominal || nominal);
 
   return (
     <div className="stack">
       <header className="page-head no-print">
         <h2>Indicadores</h2>
         <p className="muted">
-          Cada número sale de los expedientes, así que se puede abrir y ver de dónde salió.
-          {!nominal && ' Tu rol ve los totales y el seguimiento, sin la identidad de las personas.'}
+          Los totales del circuito. Cada anteojo está en Ecolentes; las entregas, los pendientes
+          y la búsqueda por persona tienen su propia sección.
+          {!nominal && ' Tu rol ve los totales, sin la identidad de las personas.'}
         </p>
       </header>
-      <nav className="tabs view-tabs no-print" aria-label="Reportes">
-          {tabs.map((t) => (
-            <button
-              key={t.key}
-              type="button"
-              className={t.key === tab ? 'tab active' : 'tab'}
-              onClick={() => setTab(t.key)}
-            >
-              {t.label}
-            </button>
-          ))}
-      </nav>
-
-      {tab === 'resumen' && <SummaryView />}
-      {tab === 'entregas' && <DeliveriesView onOpen={onOpen} />}
-      {tab === 'pendientes' && <PendingView onOpen={onOpen} />}
-      {tab === 'persona' && nominal && <PersonView onOpen={onOpen} />}
+      <SummaryView />
     </div>
   );
 }
@@ -236,7 +210,7 @@ function SummaryView() {
   );
 }
 
-function DeliveriesView({ onOpen }: { onOpen: (caseId: string) => void }) {
+export function DeliveriesView({ onOpen }: { onOpen: (caseId: string) => void }) {
   const { data, error } = useReport<DeliveriesReport>(() => api.deliveriesReport(), []);
 
   if (error) return <p className="error">{error}</p>;
@@ -244,6 +218,10 @@ function DeliveriesView({ onOpen }: { onOpen: (caseId: string) => void }) {
 
   return (
     <div className="stack">
+      <header className="page-head no-print">
+        <h2>Entregas</h2>
+        <p className="muted">El padrón de lo que ya se entregó, con el expediente que lo respalda.</p>
+      </header>
       <div className="kpis">
         <Kpi
           value={data.totals.pairs}
@@ -316,7 +294,7 @@ function DeliveriesView({ onOpen }: { onOpen: (caseId: string) => void }) {
  * controlados van aparte de los que acaban de llegar: en la caja están juntos,
  * pero sólo los primeros se pueden entregar hoy.
  */
-function PendingView({ onOpen }: { onOpen: (caseId: string) => void }) {
+export function PendingView({ onOpen }: { onOpen: (caseId: string) => void }) {
   const { data, error } = useReport<PendingReport>(() => api.pendingReport(), []);
 
   if (error) return <p className="error">{error}</p>;
@@ -333,6 +311,13 @@ function PendingView({ onOpen }: { onOpen: (caseId: string) => void }) {
 
   return (
     <div className="stack">
+      <header className="page-head no-print">
+        <h2>Pendientes</h2>
+        <p className="muted">
+          Los anteojos que todavía no se entregaron, separados entre los que ya se pueden entregar
+          y los que faltan controlar.
+        </p>
+      </header>
       <h2 className="only-print">Anteojos por entregar · {formatDate(new Date().toISOString())}</h2>
 
       <div className="kpis no-print">
@@ -343,8 +328,8 @@ function PendingView({ onOpen }: { onOpen: (caseId: string) => void }) {
         />
         <Kpi
           value={data.totals.toCheckPairs}
-          label="Falta controlarlos"
-          hint={`${data.totals.toCheckCases} expedientes recién llegados`}
+          label="En el depósito"
+          hint={`${data.totals.toCheckCases} expedientes todavía sin controlar`}
         />
         <Kpi
           value={data.totals.atOpticianPairs}
@@ -377,8 +362,8 @@ function PendingView({ onOpen }: { onOpen: (caseId: string) => void }) {
         onOpen={onOpen}
       />
       <StockSection
-        title="Llegaron, falta controlarlos"
-        hint="Están en el municipio pero todavía no se controlaron contra la receta."
+        title="En el depósito"
+        hint="Ya llegaron al depósito y todavía no se controlaron contra la receta."
         groups={porControlar}
         nominal={data.nominal}
         onOpen={onOpen}
@@ -504,7 +489,7 @@ function StockTable({
   );
 }
 
-function PersonView({ onOpen }: { onOpen: (caseId: string) => void }) {
+export function PersonView({ onOpen }: { onOpen: (caseId: string) => void }) {
   const [q, setQ] = useState('');
   const [reason, setReason] = useState('');
   const [sent, setSent] = useState('');
@@ -515,6 +500,12 @@ function PersonView({ onOpen }: { onOpen: (caseId: string) => void }) {
 
   return (
     <div className="stack">
+      <header className="page-head">
+        <h2>Por persona</h2>
+        <p className="muted">
+          Todas las solicitudes de una misma persona, aunque hayan entrado por canales distintos.
+        </p>
+      </header>
       <div className="card stack-tight">
         <form
           className="filters"

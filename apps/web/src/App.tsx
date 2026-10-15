@@ -1,27 +1,49 @@
 import { useState } from 'react';
 import { Login } from './Login';
-import { Search } from './Search';
 import { PersonDetail } from './PersonDetail';
 import { CaseInbox } from './CaseInbox';
 import { CaseDetail } from './CaseDetail';
 import { NewCase } from './NewCase';
-import { Redes } from './Redes';
-import { Reports } from './Reports';
+import { DeliveriesView, PendingView, PersonView, Reports } from './Reports';
+import { Ecolentes } from './Ecolentes';
 import { Users } from './Users';
 import { PublicForm } from './PublicForm';
-import { ROLE_LABELS, writeToken, type Role, type SessionUser } from './lib/api';
+import { ROLE_LABELS, seesIdentityInReports, writeToken, type Role, type SessionUser } from './lib/api';
 
-type Tab = 'bandeja' | 'personas' | 'nuevo' | 'redes' | 'indicadores' | 'usuarios';
+type Tab =
+  | 'bandeja'
+  | 'ecolentes'
+  | 'nuevo'
+  | 'indicadores'
+  | 'entregas'
+  | 'pendientes'
+  | 'persona'
+  | 'usuarios';
+
+const REPORT_ROLES: Role[] = ['OPERATOR', 'OPHTHALMOLOGIST', 'DIRECTOR', 'SOCIAL_DESK', 'ADMIN'];
 
 const TABS: { key: Tab; label: string; roles: Role[] | null }[] = [
   { key: 'bandeja', label: 'Expedientes', roles: null },
-  { key: 'personas', label: 'Personas', roles: ['OPERATOR', 'OPHTHALMOLOGIST', 'DIRECTOR', 'SOCIAL_DESK', 'ADMIN'] },
+  { key: 'ecolentes', label: 'Ecolentes', roles: REPORT_ROLES },
   { key: 'nuevo', label: 'Pedido nuevo', roles: ['OPERATOR', 'SOCIAL_DESK', 'ADMIN'] },
-  { key: 'redes', label: 'Redes', roles: ['SOCIAL_DESK', 'OPERATOR', 'ADMIN'] },
   // La óptica no entra a los reportes: ve sus propios expedientes y nada más.
-  { key: 'indicadores', label: 'Indicadores', roles: ['OPERATOR', 'OPHTHALMOLOGIST', 'DIRECTOR', 'SOCIAL_DESK', 'ADMIN'] },
+  { key: 'indicadores', label: 'Indicadores', roles: REPORT_ROLES },
+  { key: 'entregas', label: 'Entregas', roles: REPORT_ROLES },
+  { key: 'pendientes', label: 'Pendientes', roles: REPORT_ROLES },
+  { key: 'persona', label: 'Por persona', roles: REPORT_ROLES.filter((role) => seesIdentityInReports(role)) },
   { key: 'usuarios', label: 'Usuarios', roles: ['ADMIN'] },
 ];
+
+const BACK_LABEL: Record<Tab, string> = {
+  bandeja: 'Volver a la bandeja',
+  ecolentes: 'Volver a ecolentes',
+  nuevo: 'Volver al pedido nuevo',
+  indicadores: 'Volver a indicadores',
+  entregas: 'Volver a entregas',
+  pendientes: 'Volver a pendientes',
+  persona: 'Volver a por persona',
+  usuarios: 'Volver',
+};
 
 /**
  * El formulario del vecino no pasa por el login. Vive en /solicitud, y también
@@ -118,39 +140,31 @@ export function App() {
           <CaseDetail
             id={openCaseId}
             role={user.role}
-            backLabel={
-              openPersonId
-                ? 'Volver a la ficha'
-                : tab === 'personas'
-                  ? 'Volver a personas'
-                  : tab === 'redes'
-                    ? 'Volver a redes'
-                    : tab === 'indicadores'
-                      ? 'Volver a indicadores'
-                      : tab === 'nuevo'
-                        ? 'Volver al pedido nuevo'
-                        : 'Volver a la bandeja'
-            }
+            backLabel={openPersonId ? 'Volver a la ficha' : BACK_LABEL[tab]}
             onBack={() => setOpenCaseId(null)}
             onOpenPerson={(personId) => {
               setOpenCaseId(null);
               setOpenPersonId(personId);
-              setTab('personas');
             }}
           />
         ) : openPersonId ? (
           <PersonDetail
             id={openPersonId}
             role={user.role}
+            backLabel={BACK_LABEL[tab]}
             onBack={() => setOpenPersonId(null)}
             onOpenCase={setOpenCaseId}
           />
-        ) : tab === 'personas' ? (
-          <Search onOpen={setOpenPersonId} onOpenCase={setOpenCaseId} />
-        ) : tab === 'redes' ? (
-          <Redes onOpen={setOpenCaseId} />
+        ) : tab === 'ecolentes' ? (
+          <Ecolentes role={user.role} onOpen={setOpenCaseId} />
         ) : tab === 'indicadores' ? (
-          <Reports role={user.role} onOpen={setOpenCaseId} />
+          <Reports role={user.role} />
+        ) : tab === 'entregas' ? (
+          <DeliveriesView onOpen={setOpenCaseId} />
+        ) : tab === 'pendientes' ? (
+          <PendingView onOpen={setOpenCaseId} />
+        ) : tab === 'persona' ? (
+          <PersonView onOpen={setOpenCaseId} />
         ) : tab === 'usuarios' ? (
           <Users me={user} />
         ) : tab === 'nuevo' ? (

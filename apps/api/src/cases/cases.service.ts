@@ -77,7 +77,13 @@ export class CasesService {
       where,
       // Los códigos de los anteojos viajan con la fila: quien busca por uno
       // espera verlo en el resultado, y no tener que abrir el expediente.
-      include: { person: true, optician: true, glasses: { orderBy: { code: 'asc' } } },
+      include: {
+        person: true,
+        optician: true,
+        glasses: { orderBy: { code: 'asc' } },
+        // El pedido de compra se entiende con el presupuesto que cargó la óptica.
+        quotes: { orderBy: { version: 'desc' }, take: 1 },
+      },
       orderBy: { stageSince: 'asc' },
       take: params.take ?? 50,
     });
@@ -230,7 +236,7 @@ export class CasesService {
     }
     if (found.stage !== CaseStage.OPTICIAN_QUOTE) {
       throw new BadRequestException(
-        'Sólo se puede cargar una propuesta cuando el expediente está en propuesta óptica',
+        'Sólo se puede cargar el presupuesto cuando el expediente está en pedido de compra',
       );
     }
 
@@ -254,7 +260,7 @@ export class CasesService {
 
     await this.moveStage(
       caseId,
-      { to: CaseStage.APPROVAL, note: `Propuesta versión ${quote.version}` },
+      { to: CaseStage.APPROVAL, note: `Orden de compra con el presupuesto versión ${quote.version}` },
       author,
     );
 
@@ -265,17 +271,17 @@ export class CasesService {
   async decideQuote(caseId: string, dto: DecideQuoteDto, author: AuthenticatedUser) {
     const found = await this.requireCase(caseId);
     if (found.stage !== CaseStage.APPROVAL) {
-      throw new BadRequestException('El expediente no está esperando aprobación');
+      throw new BadRequestException('El expediente no tiene una orden de compra para aprobar');
     }
     if (!dto.approve && !dto.note?.trim()) {
-      throw new BadRequestException('Para observar la propuesta hay que decir qué corregir');
+      throw new BadRequestException('Para observar la orden de compra hay que decir qué corregir');
     }
 
     const quote = await this.prisma.quote.findFirst({
       where: { caseId },
       orderBy: { version: 'desc' },
     });
-    if (!quote) throw new BadRequestException('No hay ninguna propuesta cargada');
+    if (!quote) throw new BadRequestException('No hay presupuesto de la óptica para esta orden');
 
     await this.prisma.quote.update({
       where: { id: quote.id },
@@ -295,7 +301,7 @@ export class CasesService {
     const to = dto.approve ? CaseStage.PRODUCTION : CaseStage.OPTICIAN_QUOTE;
     await this.moveStage(
       caseId,
-      { to, note: dto.approve ? 'Propuesta aprobada' : `Observada: ${dto.note}` },
+      { to, note: dto.approve ? 'Orden de compra aprobada' : `Orden observada: ${dto.note}` },
       author,
     );
 

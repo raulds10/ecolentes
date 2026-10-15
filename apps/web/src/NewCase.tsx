@@ -1,12 +1,18 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import {
   api,
   ApiError,
   ATTACHMENT_LABELS,
   CHANNEL_LABELS,
+  formatDate,
   formatDni,
+  IS_DEMO,
+  SOCIAL_NETWORK_LABELS,
+  STAGE_LABELS,
   type IntakeChannel,
+  type IntakeRow,
   type Person,
+  type SocialNetwork,
 } from './lib/api';
 import { BirthDate, birthDateFields, EMPTY_BIRTH_DATE } from './BirthDate';
 import { PhotoField, type Photo } from './PhotoField';
@@ -17,6 +23,15 @@ import { PhotoField, type Photo } from './PhotoField';
  * persona ya fue atendida su ficha existe y no hay que volver a cargarla.
  */
 export function NewCase({ onCreated }: { onCreated: (caseId: string) => void }) {
+  const [network, setNetwork] = useState<SocialNetwork>('WHATSAPP');
+  const [notes, setNotes] = useState('');
+  const [duplicate, setDuplicate] = useState<{
+    caseId: string;
+    code: string;
+    stage: IntakeRow['stage'];
+  } | null>(null);
+  const [rows, setRows] = useState<IntakeRow[] | null>(null);
+  const [copied, setCopied] = useState(false);
   const [dni, setDni] = useState('');
   const [person, setPerson] = useState<Person | null>(null);
   const [notFound, setNotFound] = useState(false);
@@ -47,6 +62,15 @@ export function NewCase({ onCreated }: { onCreated: (caseId: string) => void }) 
   // le entregan los anteojos. Se pide una de las dos antes de guardar la ficha.
   const sinEdad = form.birthDate === '' && form.ageAtIntake === '';
 
+  function refreshIntake() {
+    api
+      .recentIntake()
+      .then(setRows)
+      .catch((e: Error) => setError(e.message));
+  }
+
+  useEffect(refreshIntake, []);
+
   async function lookUp(event: FormEvent) {
     event.preventDefault();
     setError(null);
@@ -63,9 +87,32 @@ export function NewCase({ onCreated }: { onCreated: (caseId: string) => void }) 
     }
   }
 
-  async function submit(event: FormEvent) {
-    event.preventDefault();
+  async function openFromSocial(
+    target: Person,
+    input: { network: SocialNetwork; reason: string; notes: string; force: boolean },
+  ) {
+    const sent = await api.intakeFromSocialMedia({
+      dni: target.dni,
+      firstName: target.firstName,
+      lastName: target.lastName,
+      socialNetwork: input.network,
+      ...(target.phone ? { phone: target.phone } : {}),
+      ...(target.neighborhood ? { neighborhood: target.neighborhood } : {}),
+      ...(input.reason ? { reason: input.reason } : {}),
+      ...(input.notes ? { notes: input.notes } : {}),
+      force: input.force,
+    });
+    if (!sent.created || !sent.case) {
+      setDuplicate(sent.duplicate);
+      return null;
+    }
+    return { id: sent.case.id };
+  }
+
+  async function submit(event: FormEvent | null, force = false) {
+    event?.preventDefault();
     setError(null);
+    setDuplicate(null);
     setBusy(true);
     try {
       const target =
@@ -79,11 +126,15 @@ export function NewCase({ onCreated }: { onCreated: (caseId: string) => void }) 
           ...(form.neighborhood ? { neighborhood: form.neighborhood } : {}),
           ...(form.representativeName ? { representativeName: form.representativeName } : {}),
         }));
-      const created = await api.createCase({
-        personId: target.id,
-        channel,
-        ...(reason ? { reason } : {}),
-      });
+      const created =
+        channel === 'SOCIAL_MEDIA'
+          ? await openFromSocial(target, { network, reason, notes, force })
+          : await api.createCase({
+              personId: target.id,
+              channel,
+              ...(reason ? { reason } : {}),
+            });
+      if (!created) return;
 
       // Las fotos van después del pedido y no lo frenan: si alguna no sube,
       // el pedido ya quedó cargado y la foto se agrega desde el expediente.
@@ -95,6 +146,7 @@ export function NewCase({ onCreated }: { onCreated: (caseId: string) => void }) 
         prescription,
       });
       if (fallaron.length > 0) {
+        refreshIntake();
         setFotosPendientes({ caseId: created.id, cuales: fallaron });
         return;
       }
@@ -108,11 +160,15 @@ export function NewCase({ onCreated }: { onCreated: (caseId: string) => void }) 
   }
 
   return (
-    <div className="stack phone">
+    <div className="stack">
       <header className="page-head">
         <h2>Pedido nuevo</h2>
-        <p className="muted">Primero el DNI. Si la persona ya tiene ficha, no se vuelve a cargar.</p>
+        <p className="muted">
+          El mismo pedido, haya llegado por el barrio o por redes. Primero el DNI: si la persona ya
+          tiene ficha, no se vuelve a cargar.
+        </p>
       </header>
+      <PublicLink copied={copied} onCopied={() => setCopied(true)} />
       <form className="card" onSubmit={lookUp}>
         <label htmlFor="dni">DNI de la persona</label>
         <div className="row">
@@ -169,8 +225,15 @@ export function NewCase({ onCreated }: { onCreated: (caseId: string) => void }) 
             DNI {formatDni(person.dni)}
             {person.neighborhood ? ` · ${person.neighborhood}` : ''} · ya tiene ficha
           </p>
-          <Channel value={channel} onChange={setChannel} />
+          <Channel
+            value={channel}
+            onChange={setChannel}
+            network={network}
+            onNetwork={setNetwork}
+          />
           <Reason value={reason} onChange={setReason} />
+          {channel === 'SOCIAL_MEDIA' && <Notes value={notes} onChange={setNotes} />}
+          {duplicate && <Duplicate duplicate={duplicate} busy={busy} onOpen={onCreated} onForce={() => void submit(null, true)} />}
           <Receta value={prescription} onChange={setPrescription} />
           <button type="submit" disabled={busy}>
             {busy ? 'Cargando…' : 'Cargar el pedido'}
@@ -237,14 +300,23 @@ export function NewCase({ onCreated }: { onCreated: (caseId: string) => void }) 
               Sin teléfono no vamos a poder avisarle cuando lleguen los anteojos.
             </p>
           )}
-          <Channel value={channel} onChange={setChannel} />
+          <Channel
+            value={channel}
+            onChange={setChannel}
+            network={network}
+            onNetwork={setNetwork}
+          />
           <Reason value={reason} onChange={setReason} />
+          {channel === 'SOCIAL_MEDIA' && <Notes value={notes} onChange={setNotes} />}
+          {duplicate && <Duplicate duplicate={duplicate} busy={busy} onOpen={onCreated} onForce={() => void submit(null, true)} />}
           <Receta value={prescription} onChange={setPrescription} />
           <button type="submit" disabled={busy || sinEdad}>
             {busy ? 'Cargando…' : 'Cargar ficha y pedido'}
           </button>
         </form>
       )}
+
+      <RecentIntake rows={rows} onOpen={onCreated} onVerified={refreshIntake} onError={setError} />
     </div>
   );
 }
@@ -281,25 +353,185 @@ async function uploadPhotos(input: {
 function Channel({
   value,
   onChange,
+  network,
+  onNetwork,
 }: {
   value: IntakeChannel;
   onChange: (v: IntakeChannel) => void;
+  network: SocialNetwork;
+  onNetwork: (v: SocialNetwork) => void;
 }) {
+  const channels = (Object.keys(CHANNEL_LABELS) as IntakeChannel[]).filter(
+    (item) => item !== 'PUBLIC_FORM',
+  );
   return (
     <>
       <label htmlFor="canal">Por dónde llegó</label>
-      <select
-        id="canal"
-        value={value}
-        onChange={(e) => onChange(e.target.value as IntakeChannel)}
-      >
-        {(Object.keys(CHANNEL_LABELS) as IntakeChannel[]).map((c) => (
-          <option key={c} value={c}>
-            {CHANNEL_LABELS[c]}
+      <select id="canal" value={value} onChange={(e) => onChange(e.target.value as IntakeChannel)}>
+        {channels.map((item) => (
+          <option key={item} value={item}>
+            {CHANNEL_LABELS[item]}
           </option>
         ))}
       </select>
+      {value === 'SOCIAL_MEDIA' && (
+        <>
+          <label htmlFor="red">Por qué red</label>
+          <select
+            id="red"
+            value={network}
+            onChange={(e) => onNetwork(e.target.value as SocialNetwork)}
+          >
+            {(Object.keys(SOCIAL_NETWORK_LABELS) as SocialNetwork[]).map((item) => (
+              <option key={item} value={item}>
+                {SOCIAL_NETWORK_LABELS[item]}
+              </option>
+            ))}
+          </select>
+        </>
+      )}
     </>
+  );
+}
+
+function Notes({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <>
+      <label htmlFor="notas">Notas de la conversación</label>
+      <input
+        id="notas"
+        value={value}
+        placeholder="Lo que haga falta recordar. Queda en el historial del expediente"
+        onChange={(e) => onChange(e.target.value)}
+      />
+    </>
+  );
+}
+
+function Duplicate({
+  duplicate,
+  busy,
+  onOpen,
+  onForce,
+}: {
+  duplicate: { caseId: string; code: string; stage: IntakeRow['stage'] };
+  busy: boolean;
+  onOpen: (caseId: string) => void;
+  onForce: () => void;
+}) {
+  return (
+    <div className="warn-box">
+      <p>
+        Esta persona ya tiene el <strong>{duplicate.code}</strong> abierto, en{' '}
+        {STAGE_LABELS[duplicate.stage]}.
+      </p>
+      <div className="actions">
+        <button type="button" onClick={() => onOpen(duplicate.caseId)}>
+          Abrir el que ya existe
+        </button>
+        <button type="button" className="secondary" disabled={busy} onClick={onForce}>
+          Es otro pedido, cargarlo igual
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function publicFormUrl(): string {
+  const { origin, pathname } = window.location;
+  return IS_DEMO ? `${origin}${pathname}#/solicitud` : `${origin}/solicitud`;
+}
+
+function PublicLink({ copied, onCopied }: { copied: boolean; onCopied: () => void }) {
+  return (
+    <div className="card stack-tight">
+      <h3>Si prefiere escribirlo</h3>
+      <p className="muted">
+        Es el mismo link para WhatsApp, Facebook e Instagram. Lo que entra por ahí queda con la
+        identidad sin verificar hasta que alguien hable con la persona.
+      </p>
+      <div className="row">
+        <input readOnly value={publicFormUrl()} aria-label="Link del formulario público" />
+        <button
+          type="button"
+          className="secondary"
+          onClick={() => {
+            void navigator.clipboard?.writeText(publicFormUrl());
+            onCopied();
+          }}
+        >
+          {copied ? 'Copiado' : 'Copiar'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function RecentIntake({
+  rows,
+  onOpen,
+  onVerified,
+  onError,
+}: {
+  rows: IntakeRow[] | null;
+  onOpen: (caseId: string) => void;
+  onVerified: () => void;
+  onError: (message: string) => void;
+}) {
+  async function verify(personId: string) {
+    try {
+      await api.verifyIdentity(personId);
+      onVerified();
+    } catch (e) {
+      onError(e instanceof Error ? e.message : 'No se pudo verificar');
+    }
+  }
+
+  return (
+    <div className="card stack-tight">
+      <h3>Últimos pedidos por redes y formulario</h3>
+      {rows === null && <p className="muted">Cargando…</p>}
+      {rows?.length === 0 && <p className="muted">Todavía no entró ninguno por estos canales.</p>}
+      {rows && rows.length > 0 && (
+        <ul className="cases">
+          {rows.map((row) => (
+            <li key={row.id}>
+              <div className="intake-row">
+                <button type="button" className="link" onClick={() => onOpen(row.id)}>
+                  {row.code}
+                </button>
+                <span className="who">
+                  <strong>
+                    {row.person.lastName}, {row.person.firstName}
+                  </strong>
+                  <span className="muted">
+                    DNI {formatDni(row.person.dni)}
+                    {row.person.phone ? ` · ${row.person.phone}` : ''}
+                  </span>
+                </span>
+                <span className="stage-cell">
+                  <span className="chip">
+                    {row.socialNetwork
+                      ? SOCIAL_NETWORK_LABELS[row.socialNetwork]
+                      : CHANNEL_LABELS[row.channel]}
+                  </span>
+                  <span className="days">{formatDate(row.createdAt)}</span>
+                  <span className="chip">{STAGE_LABELS[row.stage]}</span>
+                </span>
+                {!row.person.identityVerified && (
+                  <span className="verify">
+                    <span className="chip hold">Identidad por verificar</span>
+                    <button type="button" className="link" onClick={() => void verify(row.person.id)}>
+                      Hablé con la persona, verificar
+                    </button>
+                  </span>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 

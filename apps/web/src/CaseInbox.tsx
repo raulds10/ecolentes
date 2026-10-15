@@ -3,6 +3,7 @@ import { canMove, isMinor, STAGE_RULES } from '@ecolentes/shared';
 import {
   api,
   daysSince,
+  formatDate,
   formatDni,
   HOLD_LABELS,
   STAGE_LABELS,
@@ -24,6 +25,9 @@ const STAGE_ORDER: CaseStage[] = [
 ];
 
 const OPTICIAN_STAGES: CaseStage[] = ['OPTICIAN_QUOTE', 'APPROVAL', 'PRODUCTION'];
+/** La óptica fabrica. El depósito recibe. Después empieza la entrega al cliente. */
+const OPTICA_WORK: CaseStage[] = ['PRODUCTION'];
+const CLIENT_DELIVERY: CaseStage[] = ['READY_FOR_PICKUP', 'DELIVERED', 'CLOSED'];
 
 export function CaseInbox({
   onOpen,
@@ -85,11 +89,7 @@ export function CaseInbox({
     <div className="stack">
       <header className="page-head">
         <h2>Expedientes</h2>
-        <p className="muted">
-          {view === 'kanban'
-            ? 'Marcá varias tarjetas y pasalas juntas, o arrastrá la selección a la etapa que sigue.'
-            : 'El circuito, de la solicitud a la entrega.'}
-        </p>
+        <p className="muted">El circuito, de la solicitud a la entrega.</p>
       </header>
 
       {view === 'table' ? (
@@ -365,7 +365,12 @@ export function CaseInbox({
 
       {visible && visible.length > 0 && view === 'kanban' && (
         <>
-        <p className="muted kanban-hint">Deslizá el tablero para ver el resto de las etapas.</p>
+        {selected.size === 0 && (
+          <p className="kanban-hint">
+            Arrastrá una tarjeta a otra etapa, o marcá varias para moverlas juntas. Deslizá el tablero
+            para ver el resto.
+          </p>
+        )}
         <Kanban
           cases={stage ? visible.filter((item) => item.stage === stage) : visible}
           stages={role === 'OPTICIAN' ? OPTICIAN_STAGES : STAGE_ORDER}
@@ -729,7 +734,7 @@ function Kanban({
         return (
           <section
             key={stage}
-            className={columnClass}
+            className={`${columnClass}${OPTICA_WORK.includes(stage) ? ' is-optica' : ''}${CLIENT_DELIVERY.includes(stage) ? ' is-delivery' : ''}`}
             aria-label={STAGE_LABELS[stage]}
             onDragOver={(event) => {
               if (!accepts) return;
@@ -758,6 +763,8 @@ function Kanban({
             }}
           >
             <header>
+              {OPTICA_WORK.includes(stage) && <p className="kanban-owner">Óptica</p>}
+              {CLIENT_DELIVERY.includes(stage) && <p className="kanban-owner">Entrega al cliente</p>}
               <div className="kanban-title">
                 {items.length > 0 ? (
                   <ColumnSelect
@@ -848,25 +855,35 @@ function Kanban({
                           onOpen(c.id);
                         }}
                       >
-                        <span className="code">{c.code}</span>
-                        <strong>
-                          {c.person.lastName}, {c.person.firstName}
-                        </strong>
-                        <span className="muted">
-                          DNI {formatDni(c.person.dni)}
-                          {c.person.neighborhood ? ` · ${c.person.neighborhood}` : ''}
+                        <span className="kanban-who">
+                          <strong>
+                            {c.person.lastName}, {c.person.firstName}
+                          </strong>
+                          <span className="code">{c.code}</span>
                         </span>
-                        <span className="muted">
-                          {deliveredOf(c)} de {c.pairs} {c.pairs === 1 ? 'par' : 'pares'}
-                          {c.glasses.length > 0
-                            ? ` · ${c.glasses.map((pair) => pair.code).join(' · ')}`
-                            : ''}
+                        <span className="kanban-meta">
+                          {c.person.neighborhood ?? 'Sin barrio'}
+                          <span>DNI {formatDni(c.person.dni)}</span>
                         </span>
-                        <span className={c.overdue ? 'days late' : 'days'}>
-                          {stayLabel(c.stageSince)} · {whenInStage(c.stageSince)}
+                        <span className={c.overdue ? 'kanban-stay late' : 'kanban-stay'}>
+                          {cardStay(c.stageSince)}
+                          <span>{cardSince(c.stageSince)}</span>
                         </span>
-                        {c.overdue && <span className="chip hold">Pasó el plazo</span>}
-                        {c.hold && <span className="chip hold">{HOLD_LABELS[c.hold]}</span>}
+                        {(c.overdue || c.hold) && (
+                          <span className="kanban-flags">
+                            {c.overdue && <span className="chip hold">Pasó el plazo</span>}
+                            {c.hold && <span className="chip">Freno: {HOLD_LABELS[c.hold]}</span>}
+                          </span>
+                        )}
+                        {(c.stage === 'OPTICIAN_QUOTE' || c.stage === 'APPROVAL') && (
+                          <BudgetLine item={c} />
+                        )}
+                        <span className="kanban-pairs">
+                          {pairLine(c)}
+                          {c.glasses.length > 0 && (
+                            <span>{c.glasses.map((pair) => pair.code).join(' · ')}</span>
+                          )}
+                        </span>
                       </div>
                       </div>
                       {moves.length > 0 && (
@@ -953,10 +970,12 @@ function needsDetails(from: CaseStage, to: CaseStage): boolean {
 }
 
 function moveCaption(from: CaseStage, to: CaseStage): string {
-  if (from === 'APPROVAL' && to === 'PRODUCTION') return 'Aprobar';
+  if (from === 'APPROVAL' && to === 'PRODUCTION') return 'Aprobar orden';
   if (from === 'APPROVAL' && to === 'OPTICIAN_QUOTE') return 'Observar';
-  if (from === 'OPTICIAN_QUOTE' && to === 'APPROVAL') return 'Enviar propuesta';
+  if (from === 'OPTICIAN_QUOTE' && to === 'APPROVAL') return 'Armar orden de compra';
   if (from === 'READY_FOR_PICKUP' && to === 'DELIVERED') return 'Registrar entrega';
+  if (from === 'RECEIVED' && to === 'READY_FOR_PICKUP') return 'Listo para entregar';
+  if (from === 'DELIVERED' && to === 'CLOSED') return 'Cerrar entrega';
   return `Pasar a ${STAGE_LABELS[to]}`;
 }
 
@@ -1077,7 +1096,10 @@ function QuoteFields({
 
   return (
     <form onSubmit={submit} className="stack-tight">
-      <p className="muted">La propuesta pasa el expediente a aprobación.</p>
+      <p className="muted">
+        El presupuesto lo carga la óptica. Con ese presupuesto se arma la orden de compra, que es lo
+        que se aprueba.
+      </p>
       <label htmlFor="cristales">Cristales</label>
       <input id="cristales" value={lenses} onChange={(e) => setLenses(e.target.value)} required />
       <label htmlFor="armazon">Armazón</label>
@@ -1093,7 +1115,7 @@ function QuoteFields({
         </div>
       </div>
       <div className="actions">
-        <button type="submit" disabled={busy}>{busy ? 'Enviando…' : 'Enviar propuesta'}</button>
+        <button type="submit" disabled={busy}>{busy ? 'Enviando…' : 'Armar orden de compra'}</button>
         <button type="button" className="secondary" onClick={onCancel}>Cancelar</button>
       </div>
     </form>
@@ -1113,10 +1135,10 @@ function ApproveFields({
 }) {
   return (
     <div className="stack-tight">
-      <p>Se aprueba la propuesta y el expediente pasa a producción.</p>
+      <p>Se aprueba la orden de compra y el expediente pasa a producción.</p>
       <div className="actions">
         <button type="button" disabled={busy} onClick={() => onCommit(() => api.decideQuote(caseId, true))}>
-          {busy ? 'Aprobando…' : 'Aprobar'}
+          {busy ? 'Aprobando…' : 'Aprobar orden'}
         </button>
         <button type="button" className="secondary" onClick={onCancel}>Cancelar</button>
       </div>
@@ -1152,7 +1174,7 @@ function ObserveFields({
         placeholder="El armazón no corresponde a la edad"
         required
       />
-      <p className="muted">Vuelve a la óptica con este motivo.</p>
+      <p className="muted">La orden vuelve al pedido de compra para que la óptica corrija el presupuesto.</p>
       <div className="actions">
         <button type="submit" disabled={busy || !note.trim()}>
           {busy ? 'Devolviendo…' : 'Observar y devolver'}
@@ -1238,6 +1260,61 @@ function DeliveryFields({
 }
 
 type SortKey = 'code' | 'person' | 'neighborhood' | 'stage' | 'days';
+
+function cardStay(iso: string): string {
+  const days = daysSince(iso);
+  if (days <= 0) return 'Entró hoy a esta etapa';
+  if (days === 1) return 'Lleva 1 día en esta etapa';
+  return `Lleva ${days} días en esta etapa`;
+}
+
+function cardSince(iso: string): string {
+  if (daysSince(iso) <= 0) return `a las ${whenInStage(iso)}`;
+  return `desde el ${formatDate(iso)}`;
+}
+
+function latestBudget(item: CaseSummary) {
+  const quotes = item.quotes ?? [];
+  return quotes.reduce<(typeof quotes)[number] | null>(
+    (best, quote) => (!best || quote.version > best.version ? quote : best),
+    null,
+  );
+}
+
+function BudgetLine({ item }: { item: CaseSummary }) {
+  const budget = latestBudget(item);
+  const shop = item.optician?.name ?? 'la óptica';
+  if (!budget) {
+    return (
+      <span className="kanban-budget missing">
+        {item.stage === 'APPROVAL' ? 'Orden sin presupuesto' : `Sin presupuesto de ${shop}`}
+      </span>
+    );
+  }
+  return (
+    <span className="kanban-budget">
+      {item.stage === 'APPROVAL' && <strong>Orden para aprobar</strong>}
+      <span>Presupuesto de {shop}</span>
+      <strong>{budget.amount != null ? money(budget.amount) : 'Sin monto'}</strong>
+      <span>
+        {budget.lenses} · {budget.frame}
+        {budget.leadDays != null ? ` · ${budget.leadDays} días` : ''}
+      </span>
+    </span>
+  );
+}
+
+function money(amount: string): string {
+  const value = Number(amount);
+  if (Number.isNaN(value)) return amount;
+  return value.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' });
+}
+
+function pairLine(item: CaseSummary): string {
+  const delivered = deliveredOf(item);
+  if (item.pairs === 1) return `${delivered} de 1 par entregado`;
+  return `${delivered} de ${item.pairs} pares entregados`;
+}
 
 function stayLabel(iso: string): string {
   const days = daysSince(iso);

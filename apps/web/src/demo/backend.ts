@@ -499,7 +499,7 @@ export function installDemoBackend(): void {
       if (action === '/propuesta') {
         if (found.stage !== 'OPTICIAN_QUOTE') {
           throw new DemoError(
-            'Sólo se puede cargar una propuesta cuando el expediente está en propuesta óptica',
+            'Sólo se puede cargar el presupuesto cuando el expediente está en pedido de compra',
             400,
           );
         }
@@ -518,25 +518,25 @@ export function installDemoBackend(): void {
           createdAt: new Date().toISOString(),
         };
         found.quotes = [quote, ...found.quotes];
-        move(found, 'APPROVAL', `Propuesta versión ${version}`);
+        move(found, 'APPROVAL', `Orden de compra con el presupuesto versión ${version}`);
         return quote;
       }
 
       if (action === '/aprobacion') {
         if (found.stage !== 'APPROVAL') {
-          throw new DemoError('El expediente no está esperando aprobación', 400);
+          throw new DemoError('El expediente no tiene una orden de compra para aprobar', 400);
         }
         const approve = body.approve === true;
         const text = str(body.note);
         if (!approve && !text) {
-          throw new DemoError('Para observar la propuesta hay que decir qué corregir', 400);
+          throw new DemoError('Para observar la orden de compra hay que decir qué corregir', 400);
         }
         const last = found.quotes[0];
-        if (!last) throw new DemoError('No hay ninguna propuesta cargada', 400);
+        if (!last) throw new DemoError('No hay presupuesto de la óptica para esta orden', 400);
         last.status = approve ? 'APPROVED' : 'OBSERVED';
         last.decisionNote = text || null;
         last.decidedAt = new Date().toISOString();
-        move(found, approve ? 'PRODUCTION' : 'OPTICIAN_QUOTE', approve ? 'Propuesta aprobada' : `Observada: ${text}`);
+        move(found, approve ? 'PRODUCTION' : 'OPTICIAN_QUOTE', approve ? 'Orden de compra aprobada' : `Orden observada: ${text}`);
         if (approve) issueGlasses(found);
         if (!approve) {
           found.hold = 'QUOTE_OBSERVED';

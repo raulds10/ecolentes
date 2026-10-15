@@ -71,7 +71,7 @@ export function CaseActions({ detail, role, onDone }: Props) {
       {detail.stage === 'PRODUCTION' && can('OPTICIAN') && (
         <ActionButton
           busy={busy}
-          label="Entregado a la municipalidad"
+          label="Enviar al depósito"
           onClick={() => run(() => api.moveStage(detail.id, 'RECEIVED'))}
         />
       )}
@@ -259,7 +259,7 @@ function QuoteForm({
         </div>
       </div>
       <button type="submit" disabled={busy}>
-        {busy ? 'Enviando…' : 'Enviar propuesta'}
+        {busy ? 'Enviando…' : 'Armar orden de compra'}
       </button>
     </form>
   );
@@ -291,7 +291,7 @@ function ApprovalForm({
           disabled={busy}
           onClick={() => void run(() => api.decideQuote(caseId, true, note || undefined))}
         >
-          Aprobar
+          Aprobar orden
         </button>
         <button
           type="button"
@@ -303,7 +303,7 @@ function ApprovalForm({
         </button>
       </div>
       {!note.trim() && (
-        <p className="muted">Para observarla hay que decir qué corregir.</p>
+        <p className="muted">Para observar la orden hay que decir qué corregir.</p>
       )}
     </div>
   );

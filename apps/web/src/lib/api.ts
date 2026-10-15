@@ -146,6 +146,15 @@ export type CaseSummary = {
   person: Person;
   optician: { id: string; name: string } | null;
   glasses: Glasses[];
+  /** El último presupuesto de la óptica, si ya lo cargó. */
+  quotes?: {
+    version: number;
+    lenses: string;
+    frame: string;
+    leadDays: number | null;
+    amount: string | null;
+    status: Quote['status'];
+  }[];
 };
 
 export type AttachmentKind = 'DNI_FRONT' | 'DNI_BACK' | 'PRESCRIPTION';
@@ -601,10 +610,10 @@ export const api = {
 export const STAGE_LABELS: Record<CaseStage, string> = {
   REQUEST: 'Solicitud',
   ASSESSMENT: 'Evaluación y receta',
-  OPTICIAN_QUOTE: 'Propuesta óptica',
-  APPROVAL: 'Aprobación',
+  OPTICIAN_QUOTE: 'Pedido de compra',
+  APPROVAL: 'Orden de compra',
   PRODUCTION: 'Producción',
-  RECEIVED: 'Recepción municipal',
+  RECEIVED: 'Depósito',
   READY_FOR_PICKUP: 'Para entregar',
   DELIVERED: 'Entregado',
   CLOSED: 'Cerrado',
@@ -612,7 +621,7 @@ export const STAGE_LABELS: Record<CaseStage, string> = {
 
 export const HOLD_LABELS: Record<CaseHold, string> = {
   MISSING_DOCUMENTS: 'Falta documentación',
-  QUOTE_OBSERVED: 'Propuesta observada',
+  QUOTE_OBSERVED: 'Presupuesto observado',
   REJECTED: 'Rechazado',
   DELAYED: 'Demorado',
   NOT_LOCATED: 'No se pudo ubicar a la persona',
